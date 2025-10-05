@@ -1,0 +1,46 @@
+# ==============================================================================
+# DEPENDÊNCIAS DO PROJETO WEB SCRAPER ATACADÃO
+# ==============================================================================
+
+# Selenium - Automação de navegador web
+selenium==4.15.2
+
+# BeautifulSoup4 - Parser HTML/XML
+beautifulsoup4==4.12.2
+
+# Requests - HTTP library
+requests==2.31.0
+
+# WebDriver Manager - Gerencia drivers automaticamente  
+webdriver-manager==4.0.1
+
+# Scrapy - Framework de web scraping (opcional, para expansões futuras)
+Scrapy==2.11.0
+
+# Lxml - Parser XML/HTML rápido (dependência do BeautifulSoup)
+lxml==4.9.3
+
+# Pillow - Manipulação de imagens (para screenshots)
+Pillow==10.0.1
+
+# Pandas - Análise de dados (para expansões futuras)
+pandas==2.1.3
+
+# SQLite3 - Já incluído no Python (banco de dados)
+# sqlite3  # Comentado pois é built-in
+
+# ==============================================================================
+# DEPENDÊNCIAS DE DESENVOLVIMENTO (OPCIONAL)
+# ==============================================================================
+
+# Pytest - Framework de testes
+pytest==7.4.3
+
+# Black - Formatador de código
+black==23.10.1
+
+# Flake8 - Linter de código  
+flake8==6.1.0
+
+# IPython - Shell interativo melhorado
+ipython==8.17.2
