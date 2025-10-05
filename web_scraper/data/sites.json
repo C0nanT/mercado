@@ -4,6 +4,11 @@
             "name": "Atacadão Leite 1L",
             "url": "https://www.atacadao.com.br/leite-longa-vida-aurora-integral-com-tampa-88650-39196/p",
             "enabled": true
+        },
+        {
+            "name": "Café 3 Corações Tradicional - Vácuo Pacote com 500g",
+            "url": "https://www.atacadao.com.br/cafe-3-coracoes-tradicional-vacuo-70976-924/p",
+            "enabled": true
         }
     ]
 }

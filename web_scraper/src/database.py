@@ -1,220 +1,150 @@
-#!/usr/bin/env python3
-"""
-Módulo de banco de dados SQLite para o Web Scraper
-Este arquivo está preparado para uso futuro quando for necessário salvar dados.
-"""
-
 import sqlite3
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
-
 class DatabaseManager:
-    """Gerenciador do banco de dados SQLite para armazenar resultados do scraping."""
-    
-    def __init__(self, db_path="data/scraper.db"):
-        """
-        Inicializa o gerenciador de banco de dados.
-        
-        Args:
-            db_path (str): Caminho para o arquivo do banco SQLite
-        """
+    def __init__(self, db_path='data/scraped_prices.db'):
         self.db_path = db_path
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.init_database()
-    
-    def init_database(self):
-        """Cria as tabelas necessárias no banco de dados."""
-        # Garantir que o diretório existe
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         
+    def init_database(self):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Tabela principal para armazenar resultados do scraping
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS scraping_results (
+                CREATE TABLE IF NOT EXISTS products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    site_name TEXT NOT NULL,
-                    url TEXT NOT NULL,
-                    scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    data_json TEXT,
-                    success BOOLEAN DEFAULT 1,
-                    error_message TEXT
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL UNIQUE,
+                    site_name TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
-            # Índices para otimizar consultas
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_site_name 
-                ON scraping_results(site_name)
-            ''')
-            
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_scraped_at 
-                ON scraping_results(scraped_at)
+                CREATE TABLE IF NOT EXISTS price_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    price_text TEXT,
+                    price_html TEXT,
+                    price_numeric REAL,
+                    price_formatted TEXT,
+                    css_classes TEXT,
+                    cep TEXT,
+                    scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT,
+                    raw_data TEXT,
+                    FOREIGN KEY (product_id) REFERENCES products (id)
+                )
             ''')
             
             conn.commit()
+            print("✅ Banco de dados inicializado!")
     
-    def save_result(self, site_name, url, data, success=True, error_message=None):
-        """
-        Salva um resultado de scraping no banco de dados.
-        
-        Args:
-            site_name (str): Nome do site
-            url (str): URL processada
-            data (dict): Dados extraídos
-            success (bool): Se o scraping foi bem-sucedido
-            error_message (str): Mensagem de erro, se houver
-            
-        Returns:
-            int: ID do registro inserido
-        """
+    def save_product(self, name, url, site_name):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            data_json = json.dumps(data, ensure_ascii=False) if data else None
+            cursor.execute('SELECT id FROM products WHERE url = ?', (url,))
+            result = cursor.fetchone()
             
-            cursor.execute('''
-                INSERT INTO scraping_results 
-                (site_name, url, data_json, success, error_message)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (site_name, url, data_json, success, error_message))
+            if result:
+                product_id = result[0]
+                cursor.execute('''
+                    UPDATE products 
+                    SET name = ?, site_name = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (name, site_name, product_id))
+            else:
+                cursor.execute('''
+                    INSERT INTO products (name, url, site_name)
+                    VALUES (?, ?, ?)
+                ''', (name, url, site_name))
+                product_id = cursor.lastrowid
             
             conn.commit()
-            return cursor.lastrowid
+            return product_id
     
-    def get_results(self, site_name=None, limit=100, offset=0):
-        """
-        Recupera resultados do banco de dados.
-        
-        Args:
-            site_name (str, optional): Filtrar por nome do site
-            limit (int): Número máximo de resultados
-            offset (int): Número de resultados para pular
-            
-        Returns:
-            list: Lista de resultados
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row  # Para acessar por nome da coluna
-            cursor = conn.cursor()
-            
-            query = '''
-                SELECT id, site_name, url, scraped_at, data_json, success, error_message
-                FROM scraping_results
-            '''
-            params = []
-            
-            if site_name:
-                query += ' WHERE site_name = ?'
-                params.append(site_name)
-            
-            query += ' ORDER BY scraped_at DESC LIMIT ? OFFSET ?'
-            params.extend([limit, offset])
-            
-            cursor.execute(query, params)
-            
-            results = []
-            for row in cursor.fetchall():
-                result = dict(row)
-                if result['data_json']:
-                    result['data'] = json.loads(result['data_json'])
-                else:
-                    result['data'] = {}
-                del result['data_json']  # Remove o campo JSON raw
-                results.append(result)
-            
-            return results
-    
-    def get_stats(self):
-        """
-        Retorna estatísticas do banco de dados.
-        
-        Returns:
-            dict: Estatísticas
-        """
+    def save_price(self, product_id, price_data, cep='88070150'):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Total de registros
-            cursor.execute('SELECT COUNT(*) FROM scraping_results')
-            total = cursor.fetchone()[0]
+            aside_data = price_data.get('aside_data', {})
+            p_tags = aside_data.get('p_tags', [])
             
-            # Sucessos e falhas
-            cursor.execute('SELECT COUNT(*) FROM scraping_results WHERE success = 1')
-            successes = cursor.fetchone()[0]
+            if p_tags:
+                price_tag = None
+                for tag in p_tags:
+                    if tag.get('hasPrice'):
+                        price_tag = tag
+                        break
+                
+                if not price_tag and p_tags:
+                    price_tag = p_tags[0]
+                
+                if price_tag:
+                    price_numeric = None
+                    price_text = price_tag.get('textContent', '')
+                    
+                    if 'R$' in price_text:
+                        try:
+                            price_match = re.search(r'R\$\s*([\d,]+)', price_text.replace('.', '').replace(',', '.'))
+                            if price_match:
+                                price_numeric = float(price_match.group(1))
+                        except:
+                            pass
+                    
+                    cursor.execute('''
+                        INSERT INTO price_history (
+                            product_id, price_text, price_html, price_numeric,
+                            price_formatted, css_classes, cep, status, raw_data
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        product_id,
+                        price_tag.get('textContent', ''),
+                        price_tag.get('innerHTML', ''),
+                        price_numeric,
+                        f"R$ {price_numeric:.2f}" if price_numeric else None,
+                        price_tag.get('classes', ''),
+                        cep,
+                        'disponível' if price_tag.get('hasPrice') else 'indisponível',
+                        json.dumps(price_data, ensure_ascii=False, indent=2)
+                    ))
+                    
+                    price_id = cursor.lastrowid
+                    conn.commit()
+                    
+                    print(f"💾 Preço salvo no banco: ID {price_id}")
+                    return price_id
             
-            cursor.execute('SELECT COUNT(*) FROM scraping_results WHERE success = 0')
-            failures = cursor.fetchone()[0]
+            return None
+    
+    def get_database_stats(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
             
-            # Sites únicos
-            cursor.execute('SELECT COUNT(DISTINCT site_name) FROM scraping_results')
-            unique_sites = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM products')
+            total_products = cursor.fetchone()[0]
             
-            # Último scraping
-            cursor.execute('SELECT MAX(scraped_at) FROM scraping_results')
-            last_scraping = cursor.fetchone()[0]
+            cursor.execute('SELECT COUNT(*) FROM price_history')
+            total_prices = cursor.fetchone()[0]
             
             return {
-                'total_records': total,
-                'successful_scrapings': successes,
-                'failed_scrapings': failures,
-                'unique_sites': unique_sites,
-                'last_scraping': last_scraping
+                'total_products': total_products,
+                'total_prices': total_prices,
+                'database_path': self.db_path
             }
-    
-    def clear_data(self, site_name=None, older_than_days=None):
-        """
-        Remove dados do banco.
-        
-        Args:
-            site_name (str, optional): Remove apenas dados de um site específico
-            older_than_days (int, optional): Remove dados mais antigos que N dias
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            query = 'DELETE FROM scraping_results'
-            params = []
-            conditions = []
-            
-            if site_name:
-                conditions.append('site_name = ?')
-                params.append(site_name)
-            
-            if older_than_days:
-                conditions.append("scraped_at < datetime('now', '-{} days')".format(older_than_days))
-            
-            if conditions:
-                query += ' WHERE ' + ' AND '.join(conditions)
-            
-            cursor.execute(query, params)
-            deleted_rows = cursor.rowcount
-            conn.commit()
-            
-            return deleted_rows
 
+def main():
+    print("🧪 Testando DatabaseManager...")
+    db = DatabaseManager()
+    stats = db.get_database_stats()
+    print(f"📊 Estatísticas: {stats}")
+    print("✅ DatabaseManager funcionando!")
 
-# Exemplo de uso (comentado para não executar automaticamente)
 if __name__ == "__main__":
-    # db = DatabaseManager()
-    # 
-    # # Exemplo de salvamento
-    # result_id = db.save_result(
-    #     site_name="Example Site",
-    #     url="https://example.com",
-    #     data={"title": "Exemplo", "price": "R$ 100,00"}
-    # )
-    # 
-    # # Exemplo de consulta
-    # results = db.get_results(limit=10)
-    # for result in results:
-    #     print(f"Site: {result['site_name']}, Data: {result['data']}")
-    # 
-    # # Estatísticas
-    # stats = db.get_stats()
-    # print("Estatísticas:", stats)
-    
-    pass
+    main()

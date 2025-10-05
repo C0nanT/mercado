@@ -11,6 +11,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
+from database import DatabaseManager
+
 
 class SeleniumWebScraper:
     def __init__(self, config_file='data/sites.json', headless=True):
@@ -19,6 +21,7 @@ class SeleniumWebScraper:
         self.headless = headless
         self.sites = []
         self.driver = None
+        self.db = DatabaseManager()
         
         # Configurar e inicializar o driver
         self.setup_driver()
@@ -112,7 +115,7 @@ class SeleniumWebScraper:
             zipcode_input.send_keys(zipcode)
             
             print(f"   ⏳ Aguardando 5 segundos antes do submit...")
-            time.sleep(5)
+            time.sleep(2)
             
             # Procurar botão de submit com seletores mais específicos
             submit_success = False
@@ -151,7 +154,7 @@ class SeleniumWebScraper:
                 submit_success = True
             
             print(f"   ⏳ Aguardando dados carregarem após CEP (5s)...")
-            time.sleep(5)
+            time.sleep(2)
             
             print(f"   ✅ CEP configurado com sucesso!")
             return True
@@ -204,7 +207,7 @@ class SeleniumWebScraper:
         
         # 6. Aguardar um pouco mais para garantir que conteúdo dinâmico carregue
         print(f"   ⏳ Aguardando conteúdo dinâmico (5s)...")
-        time.sleep(5)
+        time.sleep(2)
         
         print(f"   ✅ Página carregada completamente!")
     
@@ -259,12 +262,12 @@ class SeleniumWebScraper:
             # Primeira captura
             print(f"   📋 Captura inicial...")
             p_tags_data = self.driver.execute_script(js_code)
-            
-            # Monitorar mudanças por 10 segundos
-            print(f"   ⏱️  Monitorando mudanças no aside por 10 segundos...")
+
+            # Monitorar mudanças por 3 segundos
+            print(f"   ⏱️  Monitorando mudanças no aside por 3 segundos...")
             all_captures = [{'timestamp': '0s', 'data': p_tags_data}]
             
-            for second in range(1, 11):
+            for second in range(1, 4):
                 time.sleep(1)
                 new_data = self.driver.execute_script(js_code)
                 
@@ -377,6 +380,49 @@ class SeleniumWebScraper:
             print(f"   ❌ Erro durante scraping: {e}")
             return None
     
+    def save_to_database(self, site_config, result):
+        """
+        Salva os dados extraídos no banco de dados SQLite.
+        
+        Args:
+            site_config (dict): Configuração do site
+            result (dict): Dados extraídos do scraping
+        """
+        try:
+            # Salvar produto
+            product_id = self.db.save_product(
+                name=result.get('site_name', site_config.get('name', 'Produto')),
+                url=site_config.get('url'),
+                site_name='Atacadão'
+            )
+            
+            # Salvar preço
+            if product_id:
+                price_id = self.db.save_price(product_id, result)
+                if price_id:
+                    print(f"   💾 Dados salvos no banco - Produto ID: {product_id}, Preço ID: {price_id}")
+                else:
+                    print(f"   ⚠️  Produto salvo mas falha ao salvar preço")
+            else:
+                print(f"   ❌ Falha ao salvar produto no banco")
+                
+        except Exception as e:
+            print(f"   ❌ Erro ao salvar no banco: {e}")
+    
+    def display_database_stats(self):
+        """Exibe estatísticas do banco de dados."""
+        try:
+            stats = self.db.get_database_stats()
+            print("\n" + "="*60)
+            print("💾 ESTATÍSTICAS DO BANCO DE DADOS")
+            print("="*60)
+            print(f"🏷️  Total de produtos: {stats['total_products']}")
+            print(f"💲 Total de preços: {stats['total_prices']}")
+            print(f"🗃️  Banco: {stats['database_path']}")
+            print("="*60)
+        except Exception as e:
+            print(f"❌ Erro ao obter estatísticas do banco: {e}")
+    
     def display_results(self, results):
         """Exibe os resultados do scraping no console de forma formatada."""
         print("\n" + "="*80)
@@ -454,9 +500,16 @@ class SeleniumWebScraper:
         for site in enabled_sites:
             result = self.scrape_site(site)
             results.append(result)
+            
+            # Salvar no banco de dados se o resultado for válido
+            if result and result.get('aside_data', {}).get('aside_found'):
+                self.save_to_database(site, result)
         
         # Exibir resultados
         self.display_results(results)
+        
+        # Exibir estatísticas do banco de dados
+        self.display_database_stats()
         
         print(f"\n🎉 Scraping finalizado! Processados {len(enabled_sites)} site(s) com sucesso.")
     
