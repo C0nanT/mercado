@@ -309,6 +309,76 @@ class SeleniumWebScraper:
                 'total_captures': 0
             }
 
+    def extract_price_via_js_selector(self, price_js_expr):
+        """
+        Extrai o preço executando uma expressão JavaScript (vinda do JSON) que retorna um elemento.
+        A expressão deve ser algo como: document.querySelector('...') ou equivalente.
+
+        Retorna um dicionário compatível com o formato 'aside_data' já usado no fluxo atual.
+        """
+        if not price_js_expr or not isinstance(price_js_expr, str):
+            return {
+                'aside_found': False,
+                'error': 'price_js ausente ou inválido',
+                'p_tags': [],
+                'total_p_tags': 0,
+                'monitoring_history': [],
+                'total_captures': 0
+            }
+
+        # Monta JS que avalia a expressão e retorna dados serializáveis
+        js_code = f'''
+var el = (function() {{ try {{ return {price_js_expr}; }} catch (e) {{ return null; }} }})();
+if (!el) {{ return {{ found: false }}; }}
+var text = el.textContent || el.innerText || '';
+var html = el.innerHTML || '';
+var classes = el.className || '';
+return {{ found: true, text: text, html: html, classes: classes }};
+'''
+
+        try:
+            result = self.driver.execute_script(js_code)
+        except Exception as e:
+            return {
+                'aside_found': False,
+                'error': f'Erro ao executar JS: {e}',
+                'p_tags': [],
+                'total_p_tags': 0,
+                'monitoring_history': [],
+                'total_captures': 0
+            }
+
+        if not result or not result.get('found'):
+            return {
+                'aside_found': False,
+                'error': 'Elemento de preço não encontrado pelo price_js',
+                'p_tags': [],
+                'total_p_tags': 0,
+                'monitoring_history': [],
+                'total_captures': 0
+            }
+
+        text = (result.get('text') or '').strip()
+        html = (result.get('html') or '').strip()
+        classes = result.get('classes') or ''
+        has_price = ('R$' in text) or ('R$' in html)
+
+        p_tag_like = {
+            'index': 1,
+            'textContent': text,
+            'innerHTML': html,
+            'classes': classes,
+            'hasPrice': has_price,
+        }
+
+        return {
+            'aside_found': True,
+            'p_tags': [p_tag_like],
+            'total_p_tags': 1,
+            'monitoring_history': [],
+            'total_captures': 1
+        }
+
     def scrape_site(self, site_config):
         """
         Realiza scraping aguardando JavaScript carregar e extraindo dados do aside.
@@ -354,8 +424,17 @@ class SeleniumWebScraper:
             js_check = self.driver.execute_script("return typeof jQuery !== 'undefined' || typeof $ !== 'undefined' || document.readyState;")
             print(f"   🔧 Status JavaScript: {js_check}")
             
-            # Extrair dados do aside com monitoramento
-            aside_data = self.extract_aside_content_with_monitoring()
+            # Extrair preço via seletor definido no JSON, com fallback para lógica antiga
+            price_js_expr = site_config.get('price_js')
+            if price_js_expr:
+                print("   🔎 Extraindo preço via price_js do JSON...")
+                aside_data = self.extract_price_via_js_selector(price_js_expr)
+                # Se falhar, tenta fallback
+                if not aside_data.get('aside_found'):
+                    print("   ⚠️  price_js não retornou elemento. Tentando fallback do aside...")
+                    aside_data = self.extract_aside_content_with_monitoring()
+            else:
+                aside_data = self.extract_aside_content_with_monitoring()
             
             # Extrair título da página
             title = ""
@@ -393,16 +472,17 @@ class SeleniumWebScraper:
             result (dict): Dados extraídos do scraping
         """
         try:
-            # Salvar produto
+            # Salvar produto (usar market do JSON como site_name)
             product_id = self.db.save_product(
                 name=result.get('site_name', site_config.get('name', 'Produto')),
                 url=site_config.get('url'),
-                site_name='Atacadão'
+                site_name=site_config.get('market') or 'Desconhecido'
             )
             
             # Salvar preço
             if product_id:
-                price_id = self.db.save_price(product_id, result)
+                cep_value = site_config.get('cep') or site_config.get('zipcode')
+                price_id = self.db.save_price(product_id, result, cep=cep_value or None)
                 if price_id:
                     print(f"   💾 Dados salvos no banco - Produto ID: {product_id}, Preço ID: {price_id}")
                 else:

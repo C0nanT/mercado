@@ -3,38 +3,64 @@
         {
             "name": "Atacadão Leite 1L",
             "url": "https://www.atacadao.com.br/leite-longa-vida-aurora-integral-com-tampa-88650-39196/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
+        },
+        {
+            "name": "Massa Pronta para Tapioca Rocha 1kg",
+            "url": "https://www.supermercadosimperatriz.com.br/massa-pronta-para-tapioca-rocha-1kg/p",
+            "price_js": "document.querySelector(\"#main > section.product-info > div > div > div.av-col-xs-24.av-col-md-10.product-info-descricao > div.product-nomeQtdBuy > div.product-price > div.plugin-preco > div > p.descricao-preco.hasListPrice.hasBestPrice > em.valor-por.price-best-price > strong\")",
+            "enabled": true,
+            "market": "Supermercados Imperatriz"
+        },
+        {
+            "name": "Ovo vermelho Friolar G Band C/30",
+            "url": "https://www.supermercadosimperatriz.com.br/ovo-vermelho-friolar-g-band-c-30/p",
+            "price_js": "document.querySelector(\"#main > section.product-info > div > div > div.av-col-xs-24.av-col-md-10.product-info-descricao > div.product-nomeQtdBuy > div.product-price > div.plugin-preco > div > p.descricao-preco.hasListPrice.hasBestPrice > em.valor-por.price-best-price > strong\")",
+            "enabled": true,
+            "market": "Supermercados Imperatriz"
         },
         {
             "name": "Café 3 Corações Tradicional - Vácuo Pacote com 500g",
             "url": "https://www.atacadao.com.br/cafe-3-coracoes-tradicional-vacuo-70976-924/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
         },
         {
             "name": "Azeite de Oliva Andorinha Extra Virgem",
             "url": "https://www.atacadao.com.br/azeite-de-oliva-andorinha-extra-virgem-23113-16327/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
         },
         {
             "name": "Creme de Leite Piracanjuba",
             "url": "https://www.atacadao.com.br/creme-de-leite-piracanjuba-23290-27439/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
         },
         {
             "name": "Leite Condensado Piracanjuba Semidesnatado",
             "url": "https://www.atacadao.com.br/leite-condensado-piracanjuba-semidesnatado-29518-30692/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
         },
         {
             "name": "Molho de Tomate Quero Tradicional",
             "url": "https://www.atacadao.com.br/molho-de-tomate-quero-tradicional-1869-48796/p",
+            "price_js": "document.querySelector(\"#__next > main > section.container.mx-auto.px-\\[5\\%\\] > article > aside > div > div > div.w-full.flex.flex-1.flex-col.gap-2 > div > div > div > p\")",
             "cep": "88070150",
-            "enabled": true
+            "enabled": true,
+            "market": "Atacadão"
         }
     ]
 }
