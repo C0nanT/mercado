@@ -91,7 +91,7 @@ class SeleniumWebScraper:
             print(f"❌ Erro ao decodificar JSON: {e}")
             sys.exit(1)
     
-    def handle_zipcode_modal(self, zipcode="88070150"):
+    def handle_zipcode_modal(self, zipcode=None):
         """
         Detecta e preenche o modal de CEP se aparecer.
         
@@ -99,6 +99,9 @@ class SeleniumWebScraper:
             zipcode (str): CEP a ser inserido
         """
         try:
+            if not zipcode:
+                print(f"   ℹ️  CEP não configurado no JSON; pulando preenchimento de CEP.")
+                return False
             print(f"   🏠 Verificando se há modal de CEP...")
             
             # Aguardar o input de CEP aparecer (máximo 15 segundos)
@@ -163,7 +166,7 @@ class SeleniumWebScraper:
             print(f"   ℹ️  Nenhum modal de CEP encontrado ou erro: {e}")
             return False
     
-    def wait_for_complete_loading(self, timeout=30):
+    def wait_for_complete_loading(self, timeout=30, zipcode=None):
         """
         Aguarda o carregamento completo da página, incluindo JavaScript.
         
@@ -192,8 +195,8 @@ class SeleniumWebScraper:
         print(f"   🌐 URL atual: {current_url}")
         print(f"   📋 Título atual: {current_title}")
         
-        # 4. Lidar com modal de CEP se aparecer
-        self.handle_zipcode_modal()
+        # 4. Lidar com modal de CEP se aparecer, usando CEP do JSON
+        self.handle_zipcode_modal(zipcode=zipcode)
         
         # 5. Aguardar aside aparecer especificamente
         print(f"   🎯 Aguardando aside aparecer...")
@@ -331,8 +334,9 @@ class SeleniumWebScraper:
             print(f"   🌐 Navegando para a URL...")
             self.driver.get(url)
             
-            # Aguardar carregamento completo (incluindo JavaScript)
-            self.wait_for_complete_loading()
+            # Aguardar carregamento completo (incluindo JavaScript), com CEP do JSON
+            zipcode = site_config.get('cep') or site_config.get('zipcode')
+            self.wait_for_complete_loading(zipcode=zipcode)
             
             # Debug: Capturar screenshot e verificar conteúdo da página
             print(f"   📸 Salvando screenshot para debug...")
