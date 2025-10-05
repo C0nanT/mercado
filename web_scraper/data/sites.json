@@ -9,6 +9,26 @@
             "name": "Café 3 Corações Tradicional - Vácuo Pacote com 500g",
             "url": "https://www.atacadao.com.br/cafe-3-coracoes-tradicional-vacuo-70976-924/p",
             "enabled": true
+        },
+        {
+            "name": "Azeite de Oliva Andorinha Extra Virgem",
+            "url": "https://www.atacadao.com.br/azeite-de-oliva-andorinha-extra-virgem-23113-16327/p",
+            "enabled": true
+        },
+        {
+            "name": "Creme de Leite Piracanjuba",
+            "url": "https://www.atacadao.com.br/creme-de-leite-piracanjuba-23290-27439/p",
+            "enabled": true
+        },
+        {
+            "name": "Leite Condensado Piracanjuba Semidesnatado",
+            "url": "https://www.atacadao.com.br/leite-condensado-piracanjuba-semidesnatado-29518-30692/p",
+            "enabled": true
+        },
+        {
+            "name": "Molho de Tomate Quero Tradicional",
+            "url": "https://www.atacadao.com.br/molho-de-tomate-quero-tradicional-1869-48796/p",
+            "enabled": true
         }
     ]
 }
