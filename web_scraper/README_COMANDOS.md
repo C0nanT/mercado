@@ -4,6 +4,11 @@ Guia prático para usar todos os comandos e funcionalidades do sistema.
 
 ## ⚡ Comandos Principais
 
+### **Ativar Ambiente Virtual**
+```bash
+source venv/bin/activate
+```
+
 ### 1. **Executar o Scraper**
 
 **Modo visual (com navegador visível):**
@@ -57,11 +62,6 @@ python db_quick.py sql "SELECT * FROM products"
 python src/database.py
 ```
 *Testa conexão e inicialização do banco*
-
-### **Ativar Ambiente Virtual**
-```bash
-source venv/bin/activate
-```
 
 ## 📊 Exemplos de Uso
 

@@ -1,6 +1,8 @@
 import json
 import sys
 import time
+import os
+import shutil
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -60,11 +62,25 @@ class SeleniumWebScraper:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # Configurar service
-            service = Service(ChromeDriverManager().install())
-            
-            # Criar driver
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            options = webdriver.ChromeOptions()
+            # 1) Tenta usar um chromedriver local (evita internet)
+            local_driver = shutil.which("chromedriver")
+
+            if local_driver:
+                service = Service(local_driver)
+            else:
+                # 2) Evita travar indefinidamente ao baixar via webdriver_manager
+                os.environ.setdefault("WDM_TIMEOUT", "10")
+                os.environ.setdefault("WDM_LOG_LEVEL", "0")
+                try:
+                    service = Service(ChromeDriverManager().install())
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Falha ao obter ChromeDriver automaticamente: {e}. "
+                        "Instale 'chromium-driver' (apt) ou defina CHROMEDRIVER_PATH."
+                    ) from e
+
+            self.driver = webdriver.Chrome(service=service, options=options)
             
             # Executar script para mascarar webdriver
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")

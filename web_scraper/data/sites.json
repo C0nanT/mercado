@@ -18,7 +18,7 @@
         {
             "name": "Ovo vermelho Friolar G Band C/30",
             "url": "https://www.supermercadosimperatriz.com.br/ovo-vermelho-friolar-g-band-c-30/p",
-            "price_js": "document.querySelector(\"#main > section.product-info > div > div > div.av-col-xs-24.av-col-md-10.product-info-descricao > div.product-nomeQtdBuy > div.product-price > div.plugin-preco > div > p.descricao-preco.hasListPrice.hasBestPrice > em.valor-por.price-best-price > strong\")",
+            "price_js": "document.querySelector(\"#main > section.product-info > div > div > div.av-col-xs-24.av-col-md-10.product-info-descricao > div.product-nomeQtdBuy > div.product-price > div.plugin-preco > div > p.descricao-preco.hasBestPrice > em.valor-por.price-best-price > strong\")",
             "enabled": true,
             "market": "Supermercados Imperatriz"
         },
