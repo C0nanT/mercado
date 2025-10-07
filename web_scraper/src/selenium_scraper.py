@@ -1,19 +1,27 @@
 import json
 import sys
 import time
-import os
-import shutil
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 from database import DatabaseManager
+from driver_utils import setup_driver as _setup_driver, close_driver as _close_driver
+from config_loader import load_sites_config as _load_sites_config
+from page_interactions import (
+    handle_zipcode_modal as _handle_zipcode_modal,
+    wait_for_complete_loading as _wait_for_complete_loading,
+    extract_aside_content_with_monitoring as _extract_aside_content_with_monitoring,
+    extract_price_via_js_selector as _extract_price_via_js_selector,
+)
+from report_utils import (
+    display_results as _display_results,
+    display_failed_summary as _display_failed_summary,
+    display_database_stats as _display_database_stats,
+    price_extracted_success as _price_extracted_success,
+)
 
 
 class SeleniumWebScraper:
@@ -34,59 +42,7 @@ class SeleniumWebScraper:
     def setup_driver(self):
         """Configura o driver do Chrome com otimizações."""
         try:
-            chrome_options = Options()
-            
-            if self.headless:
-                chrome_options.add_argument('--headless=new')  # Novo modo headless
-                # Configurações para headless funcionar melhor com JS
-                chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-                chrome_options.add_argument('--disable-web-security')
-                chrome_options.add_argument('--allow-running-insecure-content')
-            
-            # Otimizações de performance
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--disable-extensions')
-            chrome_options.add_argument('--disable-logging')
-            chrome_options.add_argument('--silent')
-            chrome_options.add_argument('--log-level=3')
-            
-            # User agent mais recente
-            chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            
-            # Configurações de viewport
-            chrome_options.add_argument('--window-size=1920,1080')
-            
-            # Desabilitar automação detectável
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
-            
-            options = webdriver.ChromeOptions()
-            # 1) Tenta usar um chromedriver local (evita internet)
-            local_driver = shutil.which("chromedriver")
-
-            if local_driver:
-                service = Service(local_driver)
-            else:
-                # 2) Evita travar indefinidamente ao baixar via webdriver_manager
-                os.environ.setdefault("WDM_TIMEOUT", "10")
-                os.environ.setdefault("WDM_LOG_LEVEL", "0")
-                try:
-                    service = Service(ChromeDriverManager().install())
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Falha ao obter ChromeDriver automaticamente: {e}. "
-                        "Instale 'chromium-driver' (apt) ou defina CHROMEDRIVER_PATH."
-                    ) from e
-
-            self.driver = webdriver.Chrome(service=service, options=options)
-            
-            # Executar script para mascarar webdriver
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            self.driver.set_page_load_timeout(30)
-            
+            self.driver = _setup_driver(self.headless)
             print("✅ Driver Chrome configurado com sucesso!")
             
         except Exception as e:
@@ -95,17 +51,8 @@ class SeleniumWebScraper:
     
     def load_config(self):
         """Carrega a configuração dos sites do arquivo JSON."""
-        try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                self.sites = config.get('sites', [])
-                print(f"✅ Configuração carregada: {len(self.sites)} sites encontrados")
-        except FileNotFoundError:
-            print(f"❌ Erro: Arquivo de configuração '{self.config_file}' não encontrado")
-            sys.exit(1)
-        except json.JSONDecodeError as e:
-            print(f"❌ Erro ao decodificar JSON: {e}")
-            sys.exit(1)
+        self.sites = _load_sites_config(self.config_file)
+        print(f"✅ Configuração carregada: {len(self.sites)} sites encontrados")
     
     def handle_zipcode_modal(self, zipcode=None):
         """
@@ -114,73 +61,7 @@ class SeleniumWebScraper:
         Args:
             zipcode (str): CEP a ser inserido
         """
-        try:
-            if not zipcode:
-                print(f"   ℹ️  CEP não configurado no JSON; pulando preenchimento de CEP.")
-                return False
-            print(f"   🏠 Verificando se há modal de CEP...")
-            
-            # Aguardar o input de CEP aparecer (máximo 15 segundos)
-            zipcode_input = WebDriverWait(self.driver, 15).until(
-                EC.element_to_be_clickable((By.NAME, "zipcode"))
-            )
-            
-            print(f"   ✅ Modal de CEP encontrado!")
-            print(f"   📝 Preenchendo CEP: {zipcode}")
-            
-            # Limpar o campo e inserir o novo CEP
-            zipcode_input.clear()
-            time.sleep(1)  # Pausa pequena após limpar
-            zipcode_input.send_keys(zipcode)
-            
-            print(f"   ⏳ Aguardando 5 segundos antes do submit...")
-            time.sleep(2)
-            
-            # Procurar botão de submit com seletores mais específicos
-            submit_success = False
-            
-            try:
-                # Tentar diferentes seletores para o botão
-                possible_buttons = [
-                    "//button[contains(@class, 'submit') or contains(@class, 'btn') or contains(@class, 'button')]",
-                    "//button[@type='submit']",
-                    "//input[@type='submit']", 
-                    "//button[contains(text(), 'Confirmar')]",
-                    "//button[contains(text(), 'OK')]",
-                    "//button[contains(text(), 'Salvar')]",
-                    "//form//button",
-                    "//div[contains(@class, 'modal')]//button"
-                ]
-                
-                for selector in possible_buttons:
-                    try:
-                        submit_button = self.driver.find_element(By.XPATH, selector)
-                        print(f"   🎯 Encontrado botão: {submit_button.text or 'Sem texto'}")
-                        print(f"   🖱️  Clicando no botão...")
-                        submit_button.click()
-                        submit_success = True
-                        break
-                    except:
-                        continue
-                        
-            except Exception as e:
-                print(f"   ⚠️  Erro ao procurar botão: {e}")
-            
-            if not submit_success:
-                # Se não encontrar botão, pressionar Enter
-                print(f"   ⌨️  Nenhum botão encontrado, pressionando Enter...")
-                zipcode_input.send_keys(Keys.RETURN)
-                submit_success = True
-            
-            print(f"   ⏳ Aguardando dados carregarem após CEP (5s)...")
-            time.sleep(2)
-            
-            print(f"   ✅ CEP configurado com sucesso!")
-            return True
-            
-        except Exception as e:
-            print(f"   ℹ️  Nenhum modal de CEP encontrado ou erro: {e}")
-            return False
+        return _handle_zipcode_modal(self.driver, zipcode=zipcode) or False
     
     def wait_for_complete_loading(self, timeout=30, zipcode=None):
         """
@@ -189,46 +70,7 @@ class SeleniumWebScraper:
         Args:
             timeout (int): Tempo máximo de espera em segundos
         """
-        print(f"   ⏳ Aguardando carregamento completo da página ({timeout}s)...")
-        
-        # 1. Aguardar body estar presente
-        print(f"   📄 Aguardando body...")
-        WebDriverWait(self.driver, timeout).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        print(f"   ✅ Body encontrado!")
-        
-        # 2. Aguardar JavaScript terminar de executar
-        print(f"   🔄 Aguardando JavaScript...")
-        WebDriverWait(self.driver, timeout).until(
-            lambda driver: driver.execute_script("return document.readyState") == "complete"
-        )
-        print(f"   ✅ JavaScript carregado!")
-        
-        # 3. Verificar URL atual e título
-        current_url = self.driver.current_url
-        current_title = self.driver.title
-        print(f"   🌐 URL atual: {current_url}")
-        print(f"   📋 Título atual: {current_title}")
-        
-        # 4. Lidar com modal de CEP se aparecer, usando CEP do JSON
-        self.handle_zipcode_modal(zipcode=zipcode)
-        
-        # 5. Aguardar aside aparecer especificamente
-        print(f"   🎯 Aguardando aside aparecer...")
-        try:
-            WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "aside[data-test='product-details-info']"))
-            )
-            print(f"   ✅ Aside encontrado!")
-        except:
-            print(f"   ⚠️  Aside ainda não apareceu, continuando...")
-        
-        # 6. Aguardar um pouco mais para garantir que conteúdo dinâmico carregue
-        print(f"   ⏳ Aguardando conteúdo dinâmico (5s)...")
-        time.sleep(2)
-        
-        print(f"   ✅ Página carregada completamente!")
+        _wait_for_complete_loading(self.driver, timeout=timeout, zipcode=zipcode)
     
     def extract_aside_content_with_monitoring(self):
         """
@@ -237,93 +79,7 @@ class SeleniumWebScraper:
         Returns:
             dict: Dados extraídos do aside com histórico de mudanças
         """
-        try:
-            # Localizar o aside usando data-test
-            print(f"   🎯 Procurando aside com data-test='product-details-info'...")
-            
-            aside_element = self.driver.find_element(By.CSS_SELECTOR, "aside[data-test='product-details-info']")
-            print(f"   ✅ Aside encontrado!")
-            
-            # JavaScript para extrair tags <p>
-            js_code = """
-            const aside = document.querySelector("aside[data-test='product-details-info']");
-            const allPTags = aside ? aside.querySelectorAll('p') : [];
-            const results = [];
-            
-            console.log('=== TODAS AS TAGS <p> DENTRO DO ASIDE ===');
-            
-            for (let i = 0; i < allPTags.length; i++) {
-                const pTag = allPTags[i];
-                const textContent = pTag.textContent || pTag.innerText || '';
-                const innerHTML = pTag.innerHTML || '';
-                const classes = pTag.className || '';
-                
-                console.log(`P Tag ${i+1}:`);
-                console.log(`  TextContent: "${textContent}"`);
-                console.log(`  InnerHTML: "${innerHTML}"`);
-                console.log(`  Classes: "${classes}"`);
-                console.log('---');
-                
-                results.push({
-                    index: i+1,
-                    textContent: textContent.trim(),
-                    innerHTML: innerHTML.trim(),
-                    classes: classes,
-                    hasPrice: innerHTML.includes('R$') || textContent.includes('R$')
-                });
-            }
-            
-            console.log(`Total de tags <p> encontradas: ${results.length}`);
-            
-            return results;
-            """
-            
-            # Primeira captura
-            print(f"   📋 Captura inicial...")
-            p_tags_data = self.driver.execute_script(js_code)
-
-            # Monitorar mudanças por 3 segundos
-            print(f"   ⏱️  Monitorando mudanças no aside por 3 segundos...")
-            all_captures = [{'timestamp': '0s', 'data': p_tags_data}]
-            
-            for second in range(1, 4):
-                time.sleep(1)
-                new_data = self.driver.execute_script(js_code)
-                
-                # Verificar se houve mudança
-                if new_data != p_tags_data:
-                    print(f"   � Mudança detectada aos {second}s!")
-                    all_captures.append({'timestamp': f'{second}s', 'data': new_data})
-                    p_tags_data = new_data  # Atualizar dados principais
-            
-            print(f"   �📋 Dados finais - Encontradas {len(p_tags_data)} tag(s) <p> no aside:")
-            for p_data in p_tags_data:
-                print(f"     P{p_data['index']}:")
-                print(f"       TextContent: '{p_data['textContent']}'")
-                print(f"       InnerHTML: '{p_data['innerHTML']}'")
-                if p_data['classes']:
-                    print(f"       Classes: {p_data['classes']}")
-                if p_data['hasPrice']:
-                    print(f"       💰 PREÇO ENCONTRADO!")
-            
-            return {
-                'aside_found': True,
-                'p_tags': p_tags_data,
-                'total_p_tags': len(p_tags_data),
-                'monitoring_history': all_captures,
-                'total_captures': len(all_captures)
-            }
-            
-        except Exception as e:
-            print(f"   ❌ Erro ao extrair conteúdo do aside: {e}")
-            return {
-                'aside_found': False,
-                'error': str(e),
-                'p_tags': [],
-                'total_p_tags': 0,
-                'monitoring_history': [],
-                'total_captures': 0
-            }
+        return _extract_aside_content_with_monitoring(self.driver)
 
     def extract_price_via_js_selector(self, price_js_expr):
         """
@@ -332,68 +88,7 @@ class SeleniumWebScraper:
 
         Retorna um dicionário compatível com o formato 'aside_data' já usado no fluxo atual.
         """
-        if not price_js_expr or not isinstance(price_js_expr, str):
-            return {
-                'aside_found': False,
-                'error': 'price_js ausente ou inválido',
-                'p_tags': [],
-                'total_p_tags': 0,
-                'monitoring_history': [],
-                'total_captures': 0
-            }
-
-        # Monta JS que avalia a expressão e retorna dados serializáveis
-        js_code = f'''
-var el = (function() {{ try {{ return {price_js_expr}; }} catch (e) {{ return null; }} }})();
-if (!el) {{ return {{ found: false }}; }}
-var text = el.textContent || el.innerText || '';
-var html = el.innerHTML || '';
-var classes = el.className || '';
-return {{ found: true, text: text, html: html, classes: classes }};
-'''
-
-        try:
-            result = self.driver.execute_script(js_code)
-        except Exception as e:
-            return {
-                'aside_found': False,
-                'error': f'Erro ao executar JS: {e}',
-                'p_tags': [],
-                'total_p_tags': 0,
-                'monitoring_history': [],
-                'total_captures': 0
-            }
-
-        if not result or not result.get('found'):
-            return {
-                'aside_found': False,
-                'error': 'Elemento de preço não encontrado pelo price_js',
-                'p_tags': [],
-                'total_p_tags': 0,
-                'monitoring_history': [],
-                'total_captures': 0
-            }
-
-        text = (result.get('text') or '').strip()
-        html = (result.get('html') or '').strip()
-        classes = result.get('classes') or ''
-        has_price = ('R$' in text) or ('R$' in html)
-
-        p_tag_like = {
-            'index': 1,
-            'textContent': text,
-            'innerHTML': html,
-            'classes': classes,
-            'hasPrice': has_price,
-        }
-
-        return {
-            'aside_found': True,
-            'p_tags': [p_tag_like],
-            'total_p_tags': 1,
-            'monitoring_history': [],
-            'total_captures': 1
-        }
+        return _extract_price_via_js_selector(self.driver, price_js_expr)
 
     def scrape_site(self, site_config):
         """
@@ -509,115 +204,71 @@ return {{ found: true, text: text, html: html, classes: classes }};
         except Exception as e:
             print(f"   ❌ Erro ao salvar no banco: {e}")
     
-    def display_database_stats(self):
-        """Exibe estatísticas do banco de dados."""
-        try:
-            stats = self.db.get_database_stats()
-            print("\n" + "="*60)
-            print("💾 ESTATÍSTICAS DO BANCO DE DADOS")
-            print("="*60)
-            print(f"🏷️  Total de produtos: {stats['total_products']}")
-            print(f"💲 Total de preços: {stats['total_prices']}")
-            print(f"🗃️  Banco: {stats['database_path']}")
-            print("="*60)
-        except Exception as e:
-            print(f"❌ Erro ao obter estatísticas do banco: {e}")
-    
     def display_results(self, results):
         """Exibe os resultados do scraping no console de forma formatada."""
-        print("\n" + "="*80)
-        print("📊 RESULTADOS DO WEB SCRAPING - ASIDE EXTRACTION")
-        print("="*80)
-        
-        if not results:
-            print("❌ Nenhum resultado encontrado.")
-            return
-        
-        for i, result in enumerate(results, 1):
-            if result is None:
-                continue
-                
-            print(f"\n🏷️  SITE {i}: {result['site_name']}")
-            print(f"🔗 URL: {result['url']}")
-            print(f"📅 Extraído em: {result['scraped_at']}")
-            print("-" * 60)
-            
-            print(f"📋 TITLE:")
-            print(f"   {result.get('title', 'Não encontrado')}")
-            print()
-            
-            aside_data = result.get('aside_data', {})
-            
-            if aside_data.get('aside_found'):
-                print(f"✅ ASIDE ENCONTRADO:")
-                print(f"   Total de tags <p>: {aside_data['total_p_tags']}")
-                print(f"   Capturas durante monitoramento: {aside_data.get('total_captures', 1)}")
-                print()
-                
-                print(f"💲 TAGS <P> EXTRAÍDAS (DADOS FINAIS):")
-                for p_data in aside_data.get('p_tags', []):
-                    print(f"   P{p_data['index']}:")
-                    print(f"     TextContent: {p_data['textContent']}")
-                    print(f"     InnerHTML: {p_data['innerHTML']}")
-                    if p_data['classes']:
-                        print(f"     Classes: {p_data['classes']}")
-                    if p_data.get('hasPrice'):
-                        print(f"     🎯 CONTÉM PREÇO!")
-                    print()
-                
-                # Mostrar histórico se houve mudanças
-                if aside_data.get('total_captures', 1) > 1:
-                    print(f"🔄 HISTÓRICO DE MUDANÇAS:")
-                    for capture in aside_data.get('monitoring_history', []):
-                        print(f"   📸 Captura em {capture['timestamp']}:")
-                        for p_data in capture['data']:
-                            if p_data.get('hasPrice'):
-                                print(f"     P{p_data['index']}: {p_data['innerHTML']} 💰")
-                            else:
-                                print(f"     P{p_data['index']}: {p_data['textContent']}")
-                    print()
-            else:
-                print(f"❌ ASIDE NÃO ENCONTRADO:")
-                print(f"   Erro: {aside_data.get('error', 'Desconhecido')}")
-                print()
+        _display_results(results)
     
+    def display_database_stats(self):
+        """Exibe estatísticas do banco de dados."""
+        _display_database_stats(self.db)
+
+    def price_extracted_success(self, result):
+        """
+        Verifica se a extração do preço foi bem-sucedida.
+        Retorna (success: bool, reason_if_fail: str|None)
+        """
+        return _price_extracted_success(result)
+
+    def display_failed_summary(self, failed_items):
+        """Exibe um resumo dos produtos cujo preço não pôde ser extraído."""
+        _display_failed_summary(failed_items)
+
     def run(self):
         """Executa o processo completo de scraping com Selenium."""
         print("🚀 Iniciando Web Scraper - ASIDE Extraction")
         print("-" * 50)
-        
+            
         # Filtrar sites habilitados
         enabled_sites = [site for site in self.sites if site.get('enabled', False)]
-        
+            
         if not enabled_sites:
             print("⚠️  Nenhum site habilitado encontrado.")
             return
-        
+            
         print(f"🎯 Processando {len(enabled_sites)} site(s) habilitado(s)...")
-        
+            
         # Fazer scraping de cada site
         results = []
+        failed_products = []
         for site in enabled_sites:
             result = self.scrape_site(site)
             results.append(result)
-            
-            # Salvar no banco de dados se o resultado for válido
-            if result and result.get('aside_data', {}).get('aside_found'):
+
+            success, reason = self.price_extracted_success(result)
+            if success:
+                # Salvar no banco de dados apenas quando o preço foi identificado
                 self.save_to_database(site, result)
-        
-        # Exibir resultados
+            else:
+                failed_products.append({
+                    'site_name': site.get('name', 'Desconhecido'),
+                    'url': site.get('url'),
+                    'reason': reason
+                })
+            
+        # Exibir resultados detalhados
         self.display_results(results)
+        
+        # Exibir resumo dos que falharam
+        self.display_failed_summary(failed_products)
         
         # Exibir estatísticas do banco de dados
         self.display_database_stats()
-        
+            
         print(f"\n🎉 Scraping finalizado! Processados {len(enabled_sites)} site(s) com sucesso.")
     
     def close(self):
-        """Fecha o driver do navegador."""
-        if self.driver:
-            self.driver.quit()
-            print("🔧 Driver encerrado.")
+        _close_driver(self.driver)
+        self.driver = None
 
 
 def main():
