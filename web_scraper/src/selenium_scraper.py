@@ -112,7 +112,6 @@ class SeleniumWebScraper:
         
         try:
             # Carregar a página
-            print(f"   🌐 Navegando para a URL...")
             self.driver.get(url)
             
             # Aguardar carregamento completo (incluindo JavaScript), com CEP do JSON
@@ -120,25 +119,22 @@ class SeleniumWebScraper:
             self.wait_for_complete_loading(zipcode=zipcode)
             
             # Debug: Capturar screenshot e verificar conteúdo da página
-            print(f"   📸 Salvando screenshot para debug...")
             try:
-                self.driver.save_screenshot("debug_screenshot.png")
-                print(f"   ✅ Screenshot salvo: debug_screenshot.png")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.driver.save_screenshot(f"debug_screenshot_{timestamp}.png")
+                print(f"   ✅ Screenshot salvo: debug_screenshot_{timestamp}.png")
             except Exception as e:
                 print(f"   ⚠️  Erro ao salvar screenshot: {e}")
             
-            # Debug: Verificar se há conteúdo na página
-            page_source_length = len(self.driver.page_source)
-            print(f"   📄 Tamanho do HTML: {page_source_length} caracteres")
-            
             # Debug: Verificar se há JavaScript ativo
             js_check = self.driver.execute_script("return typeof jQuery !== 'undefined' || typeof $ !== 'undefined' || document.readyState;")
-            print(f"   🔧 Status JavaScript: {js_check}")
-            
+            if not js_check:
+                print("   ⚠️  JavaScript não está ativo ou carregado corretamente.")
+                raise Exception("JavaScript não carregado")
+
             # Extrair preço via seletor definido no JSON, com fallback para lógica antiga
             price_js_expr = site_config.get('price_js')
             if price_js_expr:
-                print("   🔎 Extraindo preço via price_js do JSON...")
                 aside_data = self.extract_price_via_js_selector(price_js_expr)
                 # Se falhar, tenta fallback
                 if not aside_data.get('aside_found'):
@@ -225,7 +221,7 @@ class SeleniumWebScraper:
 
     def run(self):
         """Executa o processo completo de scraping com Selenium."""
-        print("🚀 Iniciando Web Scraper - ASIDE Extraction")
+        print("🚀 Iniciando Web Scraper")
         print("-" * 50)
             
         # Filtrar sites habilitados

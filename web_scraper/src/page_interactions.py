@@ -58,21 +58,15 @@ def wait_for_complete_loading(driver, timeout: int = 30, zipcode: str | None = N
     """Wait until the page is fully loaded and dynamic content likely present."""
     print(f"   ⏳ Aguardando carregamento completo da página ({timeout}s)...")
 
-    print("   📄 Aguardando body...")
     WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-    print("   ✅ Body encontrado!")
 
-    print("   🔄 Aguardando JavaScript...")
     WebDriverWait(driver, timeout).until(lambda d: d.execute_script("return document.readyState") == "complete")
-    print("   ✅ JavaScript carregado!")
 
     print(f"   🌐 URL atual: {driver.current_url}")
-    print(f"   📋 Título atual: {driver.title}")
 
     # Optional zipcode modal handling
     handle_zipcode_modal(driver, zipcode=zipcode)
 
-    print("   🎯 Tentando encontrar bloco de informações do produto...")
     try:
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "aside, [data-test='product-details-info']"))
