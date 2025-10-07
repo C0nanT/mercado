@@ -19,7 +19,6 @@ def handle_zipcode_modal(driver, zipcode: str | None = None, timeout: int = 10) 
     try:
         wait = WebDriverWait(driver, timeout)
         # Heuristics: common inputs/buttons for CEP modals on Brazilian e-commerces
-        # Try a few selectors; ignore on failure
         selectors = [
             (By.CSS_SELECTOR, "input[name='cep'], input[name='zipcode'], input[aria-label*='CEP']"),
             (By.CSS_SELECTOR, "input[type='text'][maxlength='8']"),
@@ -38,13 +37,15 @@ def handle_zipcode_modal(driver, zipcode: str | None = None, timeout: int = 10) 
         input_el.clear()
         input_el.send_keys(zipcode)
 
-        # Try to find a submit/confirm button nearby
+        # Try to find a submit/confirm button nearby and wait until enabled
         button_selectors = [
             (By.XPATH, "//button[contains(., 'OK') or contains(., 'Confirmar') or contains(., 'Calcular')]")
         ]
         for by, sel in button_selectors:
             try:
-                btn = driver.find_element(by, sel)
+                btn = wait.until(EC.presence_of_element_located((by, sel)))
+                # Wait until button is enabled (not disabled)
+                wait.until(lambda d: btn.is_enabled() and btn.get_attribute("disabled") is None)
                 btn.click()
                 break
             except Exception:
